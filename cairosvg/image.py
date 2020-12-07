@@ -92,6 +92,11 @@ def image(surface, node):
     node.image_height = image_surface.get_height()
     scale_x, scale_y, translate_x, translate_y = preserve_ratio(
         surface, node)
+    #JK: 支持图片只设置了宽和高中的一个属性，避免图片不显示
+    if not width:
+        width = scale_x * node.image_width
+    if not height:
+        height = scale_y * node.image_height
 
     # Clip image region (if necessary)
     if not (translate_x == 0 and

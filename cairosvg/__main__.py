@@ -50,7 +50,10 @@ def main(argv=None, stdout=None, stdin=None):
     parser.add_argument(
         '--output-height', default=None, type=float,
         help='desired output height in pixels')
-
+    #JK: 支持多页面PDF
+    parser.add_argument(
+        '--pdf-multipage', action='store_true',
+        help='enable PDF multi-page, only support PDF format, input example: sample1.svg,sample2.svg,...')
     parser.add_argument('-o', '--output', default='-', help='output filename')
 
     options = parser.parse_args(argv)
@@ -74,7 +77,9 @@ def main(argv=None, stdout=None, stdin=None):
         options.format or
         os.path.splitext(options.output)[1].lstrip('.') or
         'pdf').upper()
-
+    #JK：输出格式和是否支持多页面向后传递
+    kwargs['output_format'] = output_format
+    kwargs['pdf_multipage'] = options.pdf_multipage
     SURFACES[output_format.upper()].convert(**kwargs)
 
 

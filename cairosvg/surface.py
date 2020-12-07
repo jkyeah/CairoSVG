@@ -23,6 +23,8 @@ from .shapes import circle, ellipse, line, polygon, polyline, rect
 from .svg import svg
 from .text import text
 from .url import parse_url
+#JK: 用于解析SVG背景色CSS样式
+from . import css
 
 SHAPE_ANTIALIAS = {
     'optimizeSpeed': cairo.ANTIALIAS_FAST,
@@ -124,15 +126,36 @@ class Surface(object):
         parameters are keyword-only.
 
         """
+        # JK: 获取参数
+        output_format = kwargs.get('output_format', 'PDF')
+        pdf_multipage = kwargs.get('pdf_multipage', False)
+        # print('output_format={},pdf_multipage={},url={}'.format(output_format,pdf_multipage,url))
+        # JK：多页PDF(所有SVG页面尺寸必须一致)
+        if output_format.upper() == 'PDF' and pdf_multipage:
+            # 读取svg文件列表
+            url_list = url.split(',')
+            # 第1个svg文件，确保兼容单文件
+            url = url_list[0]
+        #初始化SVG页面数据
         tree = Tree(
             bytestring=bytestring, file_obj=file_obj, url=url, unsafe=unsafe,
             **kwargs)
         output = write_to or io.BytesIO()
+        #渲染页面
         instance = cls(
             tree, output, dpi, None, parent_width, parent_height, scale,
             output_width, output_height, background_color,
             map_rgba=negate_color if negate_colors else None,
             map_image=invert_image if invert_images else None)
+        # JK： 多页PDF-处理其他页面
+        if output_format.upper() == 'PDF' and pdf_multipage and len(url_list) > 1:
+            for item in url_list[1:]:
+                # 新起一页
+                instance.set_new_page()
+                # 绘制页面
+                item_tree = Tree(url=item, unsafe=unsafe, **kwargs)
+                instance.draw(item_tree)
+        #完成并输出
         instance.finish()
         if write_to is None:
             return output.getvalue()
@@ -276,12 +299,25 @@ class Surface(object):
         rgba = color(string, opacity)
         return self.map_rgba(rgba) if self.map_rgba else rgba
 
+    """JK: 另起一页,用于PDF多页面"""
+    def set_new_page(self):
+        self.context.show_page()
+
     def draw(self, node):
         """Draw ``node`` and its children."""
 
         # Parse definitions first
         if node.tag == 'svg':
             parse_all_defs(self, node)
+            #JK: 支持SVG根节点的CSS背景色
+            if not self.parent_node:
+                style_attr = node.get('style')
+                if style_attr:
+                    normal_attr, important_attr = css.parse_declarations(style_attr)
+                    for name, value in normal_attr:
+                        if value and name in ['background', 'background-color']:
+                            self.context.set_source_rgba(*color(value))
+                            self.context.paint()
 
         # Do not draw defs
         if node.tag == 'defs':
@@ -495,7 +531,12 @@ class Surface(object):
 class PDFSurface(Surface):
     """A surface that writes in PDF format."""
     surface_class = cairo.PDFSurface
-
+    """写入PDF metadata,add by jiaokun"""
+    def finish(self):
+        # set PDF Metadata
+        self.cairo.set_metadata(cairo.PDF_METADATA_AUTHOR, 'LOGOMAKER - https://logomaker.com.cn')
+        self.cairo.set_metadata(cairo.PDF_METADATA_CREATOR, 'LOGOMAKER')
+        super().finish()
 
 class PSSurface(Surface):
     """A surface that writes in PostScript format."""
